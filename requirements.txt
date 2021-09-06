@@ -1,0 +1,13 @@
+cupy-cuda110==7.8.0
+fastapi
+gdown
+imageio
+jpeg4py
+matplotlib
+numpy
+opencv-python
+pandas
+pycocotools
+scipy
+tqdm
+uvicorn
