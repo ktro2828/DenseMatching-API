@@ -1,13 +1,17 @@
+aiofiles
+coloredlogs
 cupy-cuda110==7.8.0
 fastapi
 gdown
 imageio
+jinja2
 jpeg4py
 matplotlib
 numpy
 opencv-python
 pandas
 pycocotools
+python-multipart
 scipy
 tqdm
 uvicorn

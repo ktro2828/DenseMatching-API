@@ -1,12 +1,13 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-from logger import getLogger, INFO
-import os
 import os.path as osp
+from typing import Optional, Tuple
 
 import cv2
 import numpy as np
 import torch
+
+from logger import get_logger
 
 # libs in PruneTrunong/DenseMatching
 from models.GLUNet.GLU_Net import GLUNetModel
@@ -14,14 +15,14 @@ from models.PWCNet.pwc_net import PWCNetModel
 from models.PDCNet.PDCNet import PDCNet_vgg16
 
 
-logger = getLogger(__name__)
-logger.setLevel(INFO)
+logger = get_logger(__name__)
 
+# Allowed model_name and pre_trained_model_type
 model_type = ("GLUNet", "GLUNet_GOCor", "PWCNet", "PWCNet_GOCor", "GLUNet_GOCor_star", "PDCNet")
 pre_trained_model_types = ("static", "dynamic", "chairs_things", "chairs_things_ft_sintel", "megadepth")
 
 
-def imread(bin_data, size):
+def imread(bin_data: bytes, size: Optional[Tuple[int]] = None) -> np.ndarray:
     """Read image from binary data
     Args:
         bin_data (bytes)
@@ -32,11 +33,12 @@ def imread(bin_data, size):
     file_bytes = np.asarray(bytearray(bin_data.read()), dtype=np.uint8)
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = cv2.resize(img, size)
+    if size is not None:
+        img = cv2.resize(img, size)
     return img
 
 
-def pad_to_same_shape(img1, img2):
+def pad_to_same_shape(img1: np.ndarray, img2: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Pad to same shape both images with zero
     Args:
         img1 (np.ndarray): source image
@@ -68,32 +70,37 @@ def pad_to_same_shape(img1, img2):
 
 
 def build_model(
-    model_name,
-    pre_trained_model_type,
-    global_optim_iter,
-    local_optim_iter,
-    path_to_pre_trained_models,
-    network_type,
-    device,
-    **kwargs
-):
+    model_name: str,
+    pre_trained_model_type: str,
+    checkpoint_fname: Optional[str] = None,
+    global_optim_iter: int = 3,
+    local_optim_iter: Optional[int] = None,
+    device: str = "cuda:0",
+    pcdnet_params: Optional[any] = None,
+) -> torch.nn.Module:
     """Build model
     Args:
-        name (str)
-        pre_trained_type
+        name (str): model name
+        pre_trained_type (str): pre-traied dataset type
+        checkpoint_fname:  (str, optional): path of checkpoint, if None load downloaded checkpoint
+        global_optim_iter (int): number of global itrations of optimizer
+        local_optimi_iter (int, optional): number local itrations of optimizer
+        device (str): device name
+        pcdnet_params (PCDNetParameters, optiona): parameters of PCDNet, if use
+    Returns:
+        network (torch.nn.Module)
     """
+    local_optim_iter = global_optim_iter if not local_optim_iter else int(local_optim_iter)
     logger.info(f"Model: {model_name}\nPre-trained-model: {pre_trained_model_type}")
     if model_name not in model_type:
         raise ValueError(f"The model that you chose does not exist, you chose {model_name}")
 
     if "GOCor" in model_name or "PDCNet" in model_name:
         logger.info(f"GOCor: Local iter {local_optim_iter}")
-        logger.info("GOCor: Global iter {}".format(global_optim_iter))
+        logger.info(f"GOCor: Global iter {global_optim_iter}")
 
     if pre_trained_model_type not in pre_trained_model_types:
-        raise ValueError(
-            f"The pre trained model that you chose does not exist, you chose {pre_trained_model_types}"
-        )
+        raise ValueError(f"The pre trained model that you chose does not exist, you chose {pre_trained_model_types}")
 
     estimate_uncertainty = False
     if model_name == "GLUNet":
@@ -223,26 +230,29 @@ def build_model(
     else:
         raise NotImplementedError(f"the model that you chose does not exist: {model_name}")
 
-    checkpoint_fname = osp.join(path_to_pre_trained_models, model_name + f"_{pre_trained_model_type}.pth")
-    if not os.path.exists(checkpoint_fname):
-        checkpoint_fname = checkpoint_fname + ".tar"
-        if not os.path.exists(checkpoint_fname):
-            raise ValueError(f"The checkpoint that you chose does not exist, {checkpoint_fname}")
+    if checkpoint_fname is None:
+        checkpoint_fname = osp.join("pre_trained_models", model_name + f"_{pre_trained_model_type}.pth")
 
-    network = load_network(network, checkpoint_path=checkpoint_fname)
+    if not osp.exists(checkpoint_fname):
+        checkpoint_fname = checkpoint_fname + ".tar"
+        if not osp.exists(checkpoint_fname):
+            logger.warn(f"The checkpoint that you chose does not exist, {checkpoint_fname}")
+            checkpoint_fname = None
+
+    network = load_checkpoint(network, checkpoint_path=checkpoint_fname)
     network.eval()
     network = network.to(device)
 
     # define inference arguments
-    if network_type == "PDCNet":
+    if model_name == "PDCNet":
         # define inference parameters for PDC-Net and particularly the ones needed for multi-stage alignment
         network.set_inference_parameters(
-            confidence_R=kwargs.get("confidence_map_R"),
-            ransac_thresh=kwargs.get("ransac_thresh"),
-            multi_stage_type=kwargs.get("multi_stage_type"),
-            mask_type_for_2_stage_alignment=kwargs.get("mask_type"),
-            homography_visibility_mask=kwargs.get("homography_visibility_mask"),
-            list_resizing_ratios=kwargs.get("scaling_factors"),
+            confidence_R=pcdnet_params.confidence_map_R,
+            ransac_thresh=pcdnet_params.ransac_thresh,
+            multi_stage_type=pcdnet_params.multi_stage_type,
+            mask_type_for_2_stage_alignment=pcdnet_params.mask_type,
+            homography_visibility_mask=pcdnet_params.homography_visibility_mask,
+            list_resizing_ratios=pcdnet_params.scaling_factors,
         )
 
     """
@@ -251,26 +261,43 @@ def build_model(
         network.corr.corr_module.filter_optimizer._plot_weights(save_dir='evaluation/')
         network.local_corr.filter_optimizer._plot_weights(save_dir='evaluation/')
     """
-    return network, estimate_uncertainty
+    if not hasattr(network, "name"):
+        setattr(network, "name", model_name)
+    else:
+        network.name = model_name
+
+    if not hasattr(network, "estimate_unceertanity"):
+        setattr(network, "estimate_uncertanity", estimate_uncertainty)
+    else:
+        network.estimate_uncertanity = estimate_uncertainty
+
+    return network
 
 
-def load_network(net, checkpoint_path=None, **kwargs):
+def load_checkpoint(
+    net: torch.nn.Module,
+    checkpoint_path: Optional[str] = None,
+    **kwargs,
+) -> torch.nn.Module:
     """Loads a network checkpoint file.
     args:
-        net: network architecture
-        checkpoint_path
+        net (torch.nn.Module): network architecture
+        checkpoint_path (str): path of checkpoint
     outputs:
-        net: loaded network
+        net (torch.nn.Module): loaded network
     """
+    if not hasattr(net, "state"):
+        setattr(net, "state", checkpoint_path)
+    else:
+        net.state = checkpoint_path
 
-    if not os.path.isfile(checkpoint_path):
-        raise ValueError("The checkpoint that you chose does not exist, {}".format(checkpoint_path))
+    if checkpoint_path is not None:
+        # Load checkpoint
+        checkpoint_dict = torch.load(checkpoint_path, map_location="cpu")
 
-    # Load checkpoint
-    checkpoint_dict = torch.load(checkpoint_path, map_location="cpu")
+        try:
+            net.load_state_dict(checkpoint_dict["state_dict"])
+        except Exception:
+            net.load_state_dict(checkpoint_dict)
 
-    try:
-        net.load_state_dict(checkpoint_dict["state_dict"])
-    except Exception:
-        net.load_state_dict(checkpoint_dict)
     return net

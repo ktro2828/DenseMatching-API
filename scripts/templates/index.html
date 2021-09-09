@@ -1,16 +1,23 @@
-<!-- {% extends "layout.html" %} -->
+{% extends 'layout.html' %}
 <html>
-<br>
-<div class="row">
-    <div class="col-md-10">
-        <h1>DenseMatching API</h1>
+    {% block contents %}
+    <div class="row">
+        <div class="col-md-10">
+            <h1>DenseMatching API</h1>
+        </div>
     </div>
-</div>
+    <br>
 
-<hr>
-<form method="post" enctype="multipart/form-data" >
-    <input type="file" name="query" placeholder="Query Image" multiple id="file"/>
-    <input type="file" name="reference" placeholder="Reference Image" multiple id="file"/>
-    <input type="submit" name="Upload"  />
- </form>
- </html>
+    <p>Model config (.json)</p>
+    <form action="/model" method="POST" enctype="multipart/form-data">
+        <input type="file" name="config" accept=".json" required/>
+        <input type="submit" value="Upload" />
+    </form>
+    <hr>
+    <form action="/predict" method="post" enctype="multipart/form-data" >
+        Query image file: <input type="file" name="query" multiple id="file" accept=".png, .jpg, .jpeg"/>
+        Reference image file: <input type="file" name="reference" multiple id="file" accept=".png, .jpg, .jpeg"/>
+        <input type="submit" value="Upload"  />
+    </form>
+    {% endblock %}
+</html>
