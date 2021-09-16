@@ -109,7 +109,8 @@ def predict(
     if conf_map is not None:
         conf_map_mask = (conf_map > 0.50).astype(np.uint8)
         warped_conf_map = overlay_semantic_mask(warped_img, ann=255 - conf_map_mask * 255, color=(255, 102, 51))
-        warped_conf_map_dec = base64.b64encode(warped_conf_map.tobytes())
+        warped_conf_map_enc = cv2.imencode(".jpg", warped_conf_map)[1]
+        warped_conf_map_dec = base64.b64encode(warped_conf_map)
     else:
         warped_conf_map_dec = None
 
