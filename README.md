@@ -13,6 +13,7 @@ $ make [HOST= < TARGET_HOST; 0.0.0.0 >, PORT= < TARGET_PORT; 8000 >]
 ```
 
 ## POST request
+To post request from scripts, see [example](./example)  
 Manually, you can access from http://0.0.0.0:8000/docs (change hostname and port which you set)
 
 ### **Load model (`GLUNet_GOCor` is initilly loaded)**
