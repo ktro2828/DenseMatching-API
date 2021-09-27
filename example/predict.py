@@ -10,11 +10,12 @@ import numpy as np
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", type=str, default="http://0.0.0.0:8000/predict")
-    parser.add_argument("--host", type=str)
-    parser.add_argument("--port", type=str)
+    parser.add_argument("--url", type=str, default="http://0.0.0.0:8000/predict", help="target url")
+    parser.add_argument("--host", type=str, help="[Optional] target host")
+    parser.add_argument("--port", type=str, help="[Optional] target port")
     parser.add_argument("-q", "--query", type=str, required=True)
     parser.add_argument("-r", "--reference", type=str, required=True)
+    parser.add_argument("--size", nargs="+", default=[752, 480])
     parser.add_argument("--flipping_condition", action="store_true")
     args = parser.parse_args()
     return args
@@ -23,7 +24,7 @@ def parse_args():
 def main():
     args = parse_args()
     headers = {"accept": "application/json"}
-    params = {"flipping_condition": args.flipping_condition}
+    params = {"size": [752, 480], "flipping_condition": args.flipping_condition}
     files = {"query": open(args.query, "rb"), "reference": open(args.reference, "rb")}
     if args.host is not None and args.port is not None:
         url = "http://" + args.host + ":" + args.port + "/predict"
@@ -31,13 +32,10 @@ def main():
         url = args.url
     response = requests.post(url=url, headers=headers, files=files, params=params)
 
-    #print(response.status_code, response.reason)
-    #print(response.json())
-    ret = response.json()
-
     try:
+        ret = response.json()
         b64_warped_img = ret["warped_image"]
-        est_flow_ = ret["estimated_flow"]
+        b64_est_flow = ret["estimated_flow"]
         b64_warped_conf_map = ret["warped_confidence_map"]
 
         warped_str = base64.b64decode(b64_warped_img)
@@ -50,14 +48,19 @@ def main():
         cv2.imshow("Blend image", blend_img)
         cv2.waitKey(0)
 
-        est_flow = np.array(est_flow_)
-        print("Estimated flow shape: ", est_flow.shape)
+        est_flow_str = base64.b64decode(b64_est_flow)
+        est_flow = np.fromstring(est_flow_str, dtype=np.float32)
+        est_flow = est_flow.reshape(h, w, 2)
+        print("Estimated flow: ", est_flow)
         if b64_warped_conf_map is not None:
             warped_conf_map_ = base64.b64decode(b64_warped_conf_map)
             warped_conf_map_nparr = np.fromstring(warped_conf_map_str, dtype=np.uint8)
             warped_conf_map = cv2.imdecode(warped_conf_map_nparr, cv2.IMREAD_COLOR)
-            print(warped_conf_map)
+            cv2.imshow("Confidence map", warped_conf_map)
+            cv2.waitKey(0)
+        cv2.destroyAllWindows()
     except Exception as e:
+        print(response.status_code, response.reason)
         print(e)
 
 

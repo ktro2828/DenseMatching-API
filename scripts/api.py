@@ -2,10 +2,10 @@
 
 import base64
 import io
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
-from fastapi import FastAPI, File
+from fastapi import FastAPI, File, Query
 import numpy as np
 import torch
 
@@ -74,18 +74,20 @@ def load_model(
 def predict(
     query: bytes = File(...),
     reference: bytes = File(...),
+    size: List[int] = Query([752, 480]),
     flipping_condition: bool = False,
 ) -> Dict[str, any]:
     """Prediction API calling prediction() function
     Args:
-        query (UploadFile)
-        reference (UploadFile)
-        flipping_condition (bool, optional)
+        query (bytes): query image
+        reference (bytes): reference image
+        size (List[int]): target size to resize, must be 1 or 2 length (default: [752, 480])
+        flipping_condition (bool, optional): whether flip condition (default: False)
     Returns:
-        warped_img (np.ndarray): warped query image
-        estimated_flow_numpy (np.ndarray): estimated flow
+        warped_img (np.ndarray): warped query image, in shape (size[0], size[1], 3)
+        estimated_flow_numpy (np.ndarray): estimated flow, in shape (size[0], size[1], 2)
         confidence_map (optional[np.ndarray]):
-            confidence map, if not estimate_uncertanity return None
+            confidence map, if not estimate_uncertanity return None, in shape (size[0], size[1], 3)
     """
     global model
     try:
@@ -94,11 +96,17 @@ def predict(
         logger.error(e + ", Please load model")
         return {"message": str(e) + ", Please load model"}
 
+    if len(size) == 1:
+        size = (size[0], size[0])
+    elif len(size) > 2:
+        logger.error(f"size must be 1 or 2 length list, but got {len(size)}")
+        return {"message": f"size must be 1 or 2 length list, but got {len(size)}"}
+
     try:
         query_bin = io.BytesIO(query)
         ref_bin = io.BytesIO(reference)
-        query_img = imread(query_bin, (752, 480))
-        reference_img = imread(ref_bin, (752, 480))
+        query_img = imread(query_bin, size)
+        reference_img = imread(ref_bin, size)
         query_img, reference_img = pad_to_same_shape(query_img, reference_img)
     except Exception as e:
         logger.error(e)
