@@ -4,7 +4,7 @@ FROM ${IMGAE}
 SHELL ["bash", "-c"]
 
 LABEL maintainer="ktro310115@gmail.com" \
-        description="wrapper of https://github.com/PruneTrunong/DenseMatching"
+        description="API wrapper of https://github.com/PruneTrunong/DenseMatching"
 
 # setup timezone
 ENV TZ=Asia/Tokyo

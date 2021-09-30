@@ -1,5 +1,6 @@
 # Target docker image
-TARGET_IMAGE:=ktro2828/docker-ros-densematching:0.0.1
+TARGET_IMAGE:=ktro2828/docker-densematching
+VERSION:=0.0.1
 
 # Arguments for Dockerfile
 FROM_IMAGE?=nvidia/cuda:11.0.3-devel-ubuntu20.04
@@ -17,7 +18,7 @@ all: docker-run
 .PHONY: docker-build
 docker-build: check-host
 	docker build \
-		-t $(TARGET_IMAGE) \
+		-t $(TARGET_IMAGE):$(VERSION) \
 		--build-arg FROM_IMAGE=${FROM_IMAGE} \
 		--build-arg TORCH=${TORCH} \
 		--build-arg TORCHVISION=${TORCHVISION} \
@@ -30,7 +31,7 @@ docker-run: docker-build
 		docker run -it --rm \
 				--gpus all \
 				-p $(DEVICE_PORT):$(CONTAINER_PORT) \
-				$(TARGET_IMAGE)
+				$(TARGET_IMAGE):$(VERSION)
 
 .PHONY: chek-host
 check-host:
